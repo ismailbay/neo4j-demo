@@ -1,16 +1,17 @@
 package com.openforce.ib.neo4jdemo;
 
-import org.neo4j.graphdb.GraphDatabaseService;
+import org.neo4j.cypher.javacompat.ExecutionEngine;
+import org.neo4j.cypher.javacompat.ExecutionResult;
+import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Map;
+
 /**
- * Created with IntelliJ IDEA.
- * User: ismail
- * Date: 8/8/13
- * Time: 2:12 PM
- * To change this template use File | Settings | File Templates.
+ *
+ * @author Ismail Bay <ismail.bay@openforce.com>
  */
 public class App {
 
@@ -19,13 +20,31 @@ public class App {
     public static void main(String[] args) {
         LOG.info("starting the neo4-demo");
 
-
         GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase("neo4j-demo.db");
         registerShutdownHook(graphDb);
 
         DataGenerator.generate(graphDb);
 
+        // all person knowing SQL, Java with work efficiency > 70
+        Transaction tx = graphDb.beginTx();
 
+        ExecutionEngine engine = new ExecutionEngine(graphDb);
+
+        LOG.info("People knowing SQL > 30 and Java > 60:");
+        ExecutionResult result = engine.execute(QUERY1);
+        for (Map<String, Object> row : result) {
+            for (Map.Entry<String, Object> entry : row.entrySet()) {
+                Node person = (Node) entry.getValue();
+                LOG.info("\t{}", person.getProperty("name"));
+            }
+        }
+
+        LOG.info("Best coworkers (> 80):");
+        result = engine.execute(QUERY2);
+        LOG.info(result.dumpToString());
+
+        tx.success();
+        tx.finish();
 
 
     }
@@ -43,4 +62,18 @@ public class App {
             }
         });
     }
+
+    private static final String QUERY1 =
+            "START n = node(*) " +
+            " MATCH p=java<-[r1:KNOWS]-n-[r2:KNOWS]->sql" +
+            " WHERE r1.grade > 60 AND r2.grade > 30 AND sql.name = 'SQL' AND java.name = 'Java'" +
+            " RETURN n";
+
+    private static final String QUERY2 =
+            "START n = node(*)" +
+            " MATCH p=java<-[r1:KNOWS]-n-[r2:KNOWS]->sql, n-[r3:WORKS_EFFICIENTLY]-m" +
+            " WHERE r1.grade >= 60 AND r2.grade >= 30 AND sql.name = 'SQL' AND java.name = 'Java' AND r3.efficiency > 80" +
+            " RETURN DISTINCT n.name as worker, collect(m.name) as coworkers";
+
+
 }
